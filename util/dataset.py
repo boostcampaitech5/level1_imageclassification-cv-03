@@ -59,7 +59,6 @@ class AgeLabels(int, Enum):
         if value < age_split[0]:
             return cls.YOUNG
         elif value < age_split[1]:
-            print(age_split)
             return cls.MIDDLE
         else:
             return cls.OLD
@@ -217,9 +216,9 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         이후 `split_dataset` 에서 index 에 맞게 Subset 으로 dataset 을 분기합니다.
     """
 
-    def __init__(self, data_dir, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), val_ratio=0.2):
+    def __init__(self, data_dir, age_split, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), val_ratio=0.2):
         self.indices = defaultdict(list)
-        super().__init__(data_dir, mean, std, val_ratio)
+        super().__init__(data_dir, age_split, mean, std, val_ratio)
 
     @staticmethod
     def _split_profile(profiles, val_ratio):

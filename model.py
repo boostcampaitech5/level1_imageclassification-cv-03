@@ -18,7 +18,7 @@ class BaseModel(nn.Module):
         elif 'efficientnet' in backbone:
             self.backbone.classifier[-1] = nn.Linear(self.backbone.classifier[-1].in_features, num_classes)
         else:
-            self.backbone.fn = nn.Linear(self.backbone.fc.in_features, num_classes)
+            self.backbone.fc = nn.Linear(self.backbone.fc.in_features, num_classes)
 
     def forward(self, x):
         x = self.backbone(x)

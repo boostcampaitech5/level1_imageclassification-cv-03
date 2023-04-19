@@ -60,6 +60,7 @@ class EarlyStopping:
         else:
             self.best_loss = val_loss
             self.counter = 0
+        
     
 
 def seed_everything(seed):
@@ -109,9 +110,8 @@ def train(data_dir, model_dir, args):
 
     # -- dataset
     dataset_module = getattr(import_module("util.dataset"), args.dataset.module)
-    dataset = dataset_module(data_dir)
+    dataset = dataset_module(data_dir, args.dataset.age_split)
     num_classes = dataset.num_classes
-    
     
     # -- augmentation
     transform_module = getattr(import_module("util.augmentation"), args.augmentation.module)
@@ -149,7 +149,6 @@ def train(data_dir, model_dir, args):
     model_module = getattr(import_module("model"), args.model.module)
     model = model_module(num_classes=num_classes, backbone=args.model.backbone).to(device)
     model = torch.nn.DataParallel(model)
-
 
     # -- loss & metric
     criterion = create_criterion(args.loss.type)
@@ -202,7 +201,7 @@ def train(data_dir, model_dir, args):
             labels = labels.to(device)
             
             optimizer.zero_grad()
-
+            
             mask_outs, gender_outs, age_outs = torch.split(model(inputs), [3, 2, 3], dim=1)
             preds = torch.argmax(mask_outs, dim=-1) * 6 + torch.argmax(gender_outs, dim=-1) * 3 + torch.argmax(age_outs, dim=-1)
             

@@ -1,4 +1,4 @@
-batch_size: 800
+batch_size: 1000
 resize: [224, 224]
 
 data_path: '/opt/ml/workspace/input/data/eval'
