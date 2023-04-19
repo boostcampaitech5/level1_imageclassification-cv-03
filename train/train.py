@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from timm.scheduler.step_lr import StepLRScheduler
 from torch.utils.data import DataLoader
+from torcheval.metrics.functional import multiclass_f1_score
 
 from util.loss import create_criterion
 import wandb
@@ -219,14 +220,15 @@ def train(data_dir, model_dir, args):
             if (idx + 1) % args.train.log_interval == 0:
                 train_loss = loss_value / args.train.log_interval
                 train_acc = matches / args.train.batch_size / args.train.log_interval
+                train_f1score = multiclass_f1_score(preds, labels, num_classes=18)
                 current_lr = get_lr(optimizer)
                 print(
                     f"Epoch[{epoch}/{args.train.epochs}]({idx + 1}/{len(train_loader)}) || "
-                    f"training loss {train_loss:4.4} || training accuracy {train_acc:4.2%} || lr {current_lr}"
+                    f"training loss {train_loss:4.4} || training accuracy {train_acc:4.2%} || training f1score {train_f1score:4.2} || lr {current_lr}"
                 )
 
                 if args.wandb.logging:
-                    wandb.log({"train_acc" : train_acc, "train_loss" : train_loss})
+                    wandb.log({"train_acc" : train_acc, "train_loss" : train_loss, "train_f1score" : train_f1score})
                 
                 loss_value = 0
                 matches = 0
@@ -273,7 +275,8 @@ def train(data_dir, model_dir, args):
                 val_acc_items.append(acc_item)
 
             val_loss = np.sum(val_loss_items) / len(val_loader)
-            val_acc = np.sum(val_acc_items) / len(val_set)
+            val_acc = np.sum(val_acc_items) / len(val_loader) / args.train.valid_batch_size
+            val_f1score = multiclass_f1_score(torch.tensor(pred), torch.tensor(target), num_classes=18)
             best_val_loss = min(best_val_loss, val_loss)
             early_stopping(val_loss)
             
@@ -284,17 +287,18 @@ def train(data_dir, model_dir, args):
                 print(f"New best model for val accuracy : {val_acc:4.2%}! saving the best model..")
                 torch.save(model, f"{save_dir}/best.pth")
                 best_val_acc = val_acc
+                val_f1score = val_f1score
                 best_val_preds = pred
                 best_val_targets = target
                 
             torch.save(model, f"{save_dir}/last.pth")
             
             print(
-                f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
-                f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2} \n"
+                f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2}, f1score: {val_f1score:4.2} || "
+                f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2}, best f1score: {val_f1score:4.2} \n"
             )
             if args.wandb.logging:
-                wandb.log({"val_acc" : val_acc, "val_loss" : val_loss})
+                wandb.log({"val_acc" : val_acc, "val_loss" : val_loss, "val_f1score" : val_f1score})
     
     if args.wandb.logging:
         wandb.sklearn.plot_confusion_matrix(best_val_targets, best_val_preds)
