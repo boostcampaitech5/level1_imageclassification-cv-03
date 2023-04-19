@@ -1,0 +1,7 @@
+batch_size: 800
+resize: [224, 224]
+
+data_path: '/opt/ml/workspace/input/data/eval'
+checkpoints_path: '/opt/ml/workspace/checkpoints/'
+checkpoint_name: 'efficientnet_b0_base'
+output_path: '/opt/ml/workspace/output'
