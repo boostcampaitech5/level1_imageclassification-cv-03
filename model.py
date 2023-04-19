@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
+import timm
+
 model_list = ['swin_v2_t', 'swin_t', 'regnet_y_1_6gf', 'regnet_y_3_2gf', 'regnet_x_3_2gf', 'efficientnet_b3', 'efficientnet_b4', 'efficientnet_v2_s', 'resnext50_32x4d', 'resnet50', 'efficientnet_b0']
 
 class BaseModel(nn.Module):
@@ -22,4 +24,15 @@ class BaseModel(nn.Module):
 
     def forward(self, x):
         x = self.backbone(x)
+        return x
+
+
+class BaseModelTimm(nn.Module):
+    def __init__(self, num_classes, batch_size=64, pretrained=True):
+        super().__init__()
+        self.swin_model = timm.create_model("swinv2_small_window8_256", pretrained=pretrained)        
+        self.swin_model.head = nn.Linear(self.swin_model.head.in_features, num_classes, bias=True)
+
+    def forward(self, x):
+        x = self.swin_model(x)
         return x
