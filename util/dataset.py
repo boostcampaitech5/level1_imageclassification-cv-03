@@ -11,7 +11,8 @@ from torch.utils.data import Dataset, Subset, random_split
 from torchvision.transforms import Resize, ToTensor, Normalize, Compose, CenterCrop, ColorJitter
 from imblearn.over_sampling import RandomOverSampler
 from collections import Counter
-
+import torchvision.transforms as T
+from sklearn.model_selection import KFold
 
 IMG_EXTENSIONS = [
     ".jpg", ".JPG", ".jpeg", ".JPEG", ".png",
@@ -75,6 +76,15 @@ class Subset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.indices)
     
+    def get_class_weight(self):
+        labels = []
+        for i in self.indices:
+            labels.append(int(self.dataset.get_label(i)[2]))
+        labels_cnt = Counter(labels)
+        weights = [1/labels_cnt[label] for label in range(len(labels_cnt))]
+        weights = [weight / sum(weights) * len(labels_cnt) for weight in weights]
+        return weights     
+        
     def oversample(self, category='age', weight=[1,1,1]):
         print(f"{category} 기준 오버 샘플링, weight = {weight}")
         category_idx = {'mask':0, 'gender':1, 'age':2}
@@ -107,9 +117,8 @@ class MaskBaseDataset(Dataset):
     mask_labels = []
     gender_labels = []
     age_labels = []
-    multi_class_labels = []
 
-    def __init__(self, data_dir, age_split, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), val_ratio=0.2):
+    def __init__(self, data_dir, age_split, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), val_ratio=0.2):
         self.data_dir = data_dir
         self.mean = mean
         self.std = std
@@ -216,7 +225,7 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         이후 `split_dataset` 에서 index 에 맞게 Subset 으로 dataset 을 분기합니다.
     """
 
-    def __init__(self, data_dir, age_split, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), val_ratio=0.2):
+    def __init__(self, data_dir, age_split, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), val_ratio=0.2):
         self.indices = defaultdict(list)
         super().__init__(data_dir, age_split, mean, std, val_ratio)
 
@@ -230,42 +239,69 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         return {
             "train": train_indices,
             "val": val_indices
-        }
+        }     
     
-    def setup(self):
-        profiles = os.listdir(self.data_dir)
-        profiles = [profile for profile in profiles if not profile.startswith(".")]
-        split_profiles = self._split_profile(profiles, self.val_ratio)
+    # def setup(self):
+    #     profiles = os.listdir(self.data_dir)
+    #     profiles = [profile for profile in profiles if not profile.startswith(".")]
+    #     split_profiles = self._split_profile(profiles, self.val_ratio)
 
-        cnt = 0
-        for phase, indices in split_profiles.items():
-            for _idx in indices:
-                profile = profiles[_idx]
-                img_folder = os.path.join(self.data_dir, profile)
-                for file_name in os.listdir(img_folder):
-                    _file_name, ext = os.path.splitext(file_name)
-                    if _file_name not in self._file_names:  # "." 로 시작하는 파일 및 invalid 한 파일들은 무시합니다
-                        continue
+    #     cnt = 0
+    #     for phase, indices in split_profiles.items():
+    #         for _idx in indices:
+    #             profile = profiles[_idx]
+    #             img_folder = os.path.join(self.data_dir, profile)
+    #             for file_name in os.listdir(img_folder):
+    #                 _file_name, ext = os.path.splitext(file_name)
+    #                 if _file_name not in self._file_names:  # "." 로 시작하는 파일 및 invalid 한 파일들은 무시합니다
+    #                     continue
 
-                    img_path = os.path.join(self.data_dir, profile, file_name)  # (resized_data, 000004_male_Asian_54, mask1.jpg)
-                    mask_label = self._file_names[_file_name]
+    #                 img_path = os.path.join(self.data_dir, profile, file_name)  # (resized_data, 000004_male_Asian_54, mask1.jpg)
+    #                 mask_label = self._file_names[_file_name]
 
-                    id, gender, race, age = profile.split("_")
-                    gender_label = GenderLabels.from_str(gender)
-                    age_label = AgeLabels.from_number(age, self.age_split)
+    #                 id, gender, race, age = profile.split("_")
+    #                 gender_label = GenderLabels.from_str(gender)
+    #                 age_label = AgeLabels.from_number(age, self.age_split)
 
-                    self.image_paths.append(img_path)
-                    self.mask_labels.append(mask_label)
-                    self.gender_labels.append(gender_label)
-                    self.age_labels.append(age_label)
+    #                 self.image_paths.append(img_path)
+    #                 self.mask_labels.append(mask_label)
+    #                 self.gender_labels.append(gender_label)
+    #                 self.age_labels.append(age_label)
 
-                    self.indices[phase].append(cnt)
-                    cnt += 1
-
+    #                 self.indices[phase].append(cnt)
+    #                 cnt += 1
+    
     def split_dataset(self, oversampling=False, category='age', weights=[1,1,1]) -> List[Subset]:
         result = [Subset(self, indices) for phase, indices in self.indices.items()]
         if oversampling:
             result[0].oversample(category, weights)
+        return result 
+    
+    
+    def kfold_split(self, k = 5, oversampling=False, category='age', weights=[1,1,1]) -> List[Subset]:
+        profiles = os.listdir(self.data_dir)
+        profiles = [profile for profile in profiles if not profile.startswith(".")]
+        
+        length = len(profiles)
+        kf = KFold(n_splits=k, shuffle=True)
+        profiles_idx = list(range(0, length*7, 7))
+        folds = kf.split(profiles_idx)
+        
+        result = []
+        for train_profile_ids, val_profile_ids in folds:
+            train_ids = []
+            val_ids = []
+            for i in train_profile_ids:
+                train_ids.extend(list(range(profiles_idx[i], profiles_idx[i]+7)))
+            for i in val_profile_ids:
+                val_ids.extend(list(range(profiles_idx[i], profiles_idx[i]+7)))
+            result.append([Subset(self, train_ids), Subset(self, val_ids)])
+            
+        if oversampling:
+            for i in range(k):
+                print(f"[{i+1}번 Fold]")
+                result[i][0].oversample(category, weights)
+                print()
         return result 
 
 

@@ -144,8 +144,7 @@ def train(data_dir, model_dir, args):
         pin_memory=use_cuda,
         drop_last=True
     )
-
-
+    
     # -- model
     model_module = getattr(import_module("model"), args.model.module)
     model = model_module(num_classes=num_classes, backbone=args.model.backbone).to(device)
@@ -153,6 +152,9 @@ def train(data_dir, model_dir, args):
 
     # -- loss & metric
     criterion = create_criterion(args.loss.type)
+    age_weights = torch.FloatTensor(train_set.get_class_weight()).to(device)
+    print(f"age label loss weight : {age_weights.tolist()}")
+    age_criterion = create_criterion(args.loss.type, weight=age_weights)
     
     opt_module = getattr(import_module("torch.optim"), args.optimizer.type)
     optimizer = opt_module(
@@ -208,7 +210,7 @@ def train(data_dir, model_dir, args):
             
             mask_loss = criterion(mask_outs, mask_labels)
             gender_loss = criterion(gender_outs, gender_labels)
-            age_loss = criterion(age_outs, age_labels)
+            age_loss = age_criterion(age_outs, age_labels)
             
             loss = mask_loss * args.loss.class_weight[0] + gender_loss * args.loss.class_weight[1] + age_loss * args.loss.class_weight[2] 
             
@@ -311,9 +313,8 @@ if __name__ == '__main__':
     # Yaml 파일 로드
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
-        
+    print(config)    
     args = CustomNamespace(config)
-    
     
     if args.wandb.logging:
         wandb.login()

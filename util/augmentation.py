@@ -8,8 +8,11 @@ class BaseAugmentation:
             T.CenterCrop(384),
             T.Resize(resize, Image.BILINEAR),
             T.RandomHorizontalFlip(p=0.5),
+            T.RandomRotation(degrees=15),
+            T.ColorJitter(brightness=0.2),
+            T.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0)),
             T.ToTensor(),
-            T.Normalize(mean=mean, std=std),
+            T.Normalize(mean=mean, std=std)
         ])
 
     def __call__(self, image):
